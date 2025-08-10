@@ -2,15 +2,19 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"log"
+	"math/rand"
 	"net/http"
 	"os/exec"
 	"strings"
+	"time"
 
-	"NetaBako/fileio"
+	"Netabako/fileio"
 
 	"gopkg.in/yaml.v2"
 )
@@ -61,6 +65,7 @@ func LoadPromptsYaml(path string) (map[string]string, error) {
 // 実行には、gcloud CLIがインストールされており、認証済みである必要があります。
 func main() {
 	// プロンプトの読み込み
+	isSearchTopic := flag.Bool("searchtopic", false, "リアルタイムトピック検索を有効にします")
 	promptKey := flag.String("prompt", "", "使用するプロンプトのキーを指定します（例: X)")
 	promptKeyShort := flag.String("p", "", "使用するプロンプトのキーを短縮形で指定します（例: X)")
 	themeKey := flag.String("theme", "", "テーマを指定します（例: 旅行）")
@@ -90,12 +95,66 @@ func main() {
 		fmt.Printf("⚠️ プロンプトキー '%s' が見つかりません。利用可能なキー: %v\n", selectedKey, prompts)
 		return
 	}
+	var selectedTheme string
 
-	// テーマの設定
-	selectedTheme := *themeKey
-	if *themeKeyShort != "" {
-		selectedTheme = *themeKeyShort
+	// リアルタイムトピック検索
+	if *isSearchTopic {
+
+		ctx := context.Background()
+
+		yahoo, err := fetchYahooRealtime(ctx, 10)
+		if err != nil {
+			log.Printf("WARN: yahoo fetch: %v", err)
+		}
+		google, err := fetchGoogleTrends(ctx, "JP", 10)
+		if err != nil {
+			log.Printf("WARN: google fetch: %v", err)
+		}
+
+		if len(yahoo) == 0 && len(google) == 0 {
+			log.Fatal("どちらからもトピックを取得できませんでした。ネットワーク/セレクタを確認してください。")
+		}
+
+		merged := mergeAndRank(yahoo, google, 10)
+
+		/*
+			fmt.Println("=== Yahoo Realtime ===")
+			for i, t := range yahoo {
+				fmt.Printf("%2d. %s\n", i+1, t.Title)
+			}
+			fmt.Println("\n=== Google Trends ===")
+			for i, t := range google {
+				if t.Note != "" {
+					fmt.Printf("%2d. %s (%s)\n", i+1, t.Title, t.Note)
+				} else {
+					fmt.Printf("%2d. %s\n", i+1, t.Title)
+				}
+			}
+			fmt.Println("\n=== Merged Top ===")
+			for i, t := range merged {
+				if t.Note != "" {
+					fmt.Printf("%2d. %s [%s]\n", i+1, t.Title, t.Note)
+				} else {
+					fmt.Printf("%2d. %s\n", i+1, t.Title)
+				}
+			}
+		*/
+
+		// ランダムでお題を決め、 selectedThemeに設定
+		rand.Seed(time.Now().UnixNano())   // 毎回違う乱数になるようにシードを設定
+		arrayIdx := rand.Intn(len(merged)) // 0 〜 len(A)-1 の範囲で乱数
+		selectedTheme = merged[arrayIdx].Title
+
+		// Gemini へ渡すプロンプト例（標準出力）
+		fmt.Println("\n=== Theme ===", selectedTheme)
+	} else {
+		// テーマの設定
+		selectedTheme = *themeKey
+		if *themeKeyShort != "" {
+			selectedTheme = *themeKeyShort
+		}
 	}
+
 	if selectedTheme == "" {
 		fmt.Println("⚠️ テーマが指定されていません。-theme または -t オプションを使用してください。")
 		return
