@@ -7,6 +7,17 @@ export default function Home() {
 	const [url, setUrl] = useState("");
 	const [comment, setComment] = useState("");
 	const [postText, setPostText] = useState("");
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = async () => {
+	try {
+		await navigator.clipboard.writeText(postText);
+		setCopied(true);
+	} catch (error) {
+		console.error("コピーに失敗しました", error);
+		setCopied(false);
+	}
+	};
 
 	return (
     	<div className={styles.page}>
@@ -32,7 +43,10 @@ export default function Home() {
 				<button
 					type="button"
 					className={styles.primaryButton}
-					onClick={() => setPostText(`${comment}\n\n${url}`)}
+					onClick={() => {
+						setPostText(`${comment}\n\n${url}`);
+						setCopied(false);
+					}}
 					disabled={!comment.trim()}
 				>
 				投稿文を作る
@@ -42,15 +56,18 @@ export default function Home() {
 				<textarea
 					id="postText"
 					value={postText}
-					onChange={(event) => setPostText(event.target.value)}
+					onChange={(event) => {
+						setPostText(event.target.value);
+						setCopied(false);
+					}}
 				/>
 
 				<button
 				type="button"
-				onClick={() => navigator.clipboard.writeText(postText)}
+				onClick={handleCopy}
 				disabled={!postText.trim()}
 				>
-				コピー
+				{copied ? "コピーしました" : "コピー"}
 				</button>
 			</main>
     	</div>
